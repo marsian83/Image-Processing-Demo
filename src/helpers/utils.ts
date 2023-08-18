@@ -113,7 +113,7 @@ export function removeSaltPepperFromGrayscale(
   const fixed: number[][] = [];
 
   neighbours = neighbours || 1;
-  Q = Q || -1.5;
+  Q = Q || 1;
 
   for (let i = 0; i < image.rgb.length; i++) {
     if (image.rgb[i][0] === 0 || image.rgb[i][0] === 255) {
