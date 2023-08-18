@@ -11,11 +11,12 @@ type Image = {
 };
 
 interface Output {
-  grayscale: {
+  grayscale?: {
     avg: Image;
     weighted: Image;
     yuv: Image;
   };
+  saltPepper?: Image;
 }
 
 export default function SaltPepperPage() {
@@ -23,7 +24,8 @@ export default function SaltPepperPage() {
     dimensions: { width: 0, height: 0 },
     rgb: [],
   });
-  const [output, setOutput] = useState();
+  const [grayscaleInput, setGrayscaleInput] = useState<Image>();
+  const [output, setOutput] = useState<Output>();
 
   function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = (event.target.files as FileList)[0];
@@ -70,105 +72,129 @@ export default function SaltPepperPage() {
     }
   }
 
+  function generateGrayScaleOutputs() {
+    setOutput({
+      ...output,
+      grayscale: {
+        avg: rgbToGrayscale(inputImg, "AVERAGE"),
+        weighted: rgbToGrayscale(inputImg, "WEIGHTED"),
+        yuv: rgbToGrayscale(inputImg, "YUV"),
+      },
+    });
+  }
+
+  useEffect(() => {
+    if (inputImg.dimensions.width && inputImg.dimensions.height) {
+      generateGrayScaleOutputs();
+    }
+  }, [inputImg]);
+
+  useEffect(() => {
+    if (grayscaleInput) {
+      setOutput({
+        ...output,
+        saltPepper: addSaltPepper(grayscaleInput),
+      });
+    }
+  }, [grayscaleInput]);
+
   return (
     <article className="h-screen flex flex-col p-10 items-center gap-y-12">
-      <div>
-        <input type="file" accept="image/*" onChange={handleImageUpload} />
-      </div>
-
-      {inputImg.dimensions.width && inputImg.dimensions.height && (
-        <RGBImageDisplay
-          className="max-w-3/4"
-          width={inputImg.dimensions.width}
-          height={inputImg.dimensions.height}
-          rgbArray={inputImg.rgb}
+      <div className="relative rounded-md hover:saturate-200 duration-150">
+        <div className="absolute top-0 left-0 pointer-events-none w-full h-full bg-primary flex justify-center items-center rounded-inherit">
+          Upload Image
+        </div>
+        <input
+          className="rounded-inherit p-2 cursor-pointer"
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
         />
-      )}
+      </div>
 
-      <div className="flex flex-col items-center">
-        <h1 className="text-xl font-medium">Grayscale Images</h1>
-        {inputImg.dimensions.width && inputImg.dimensions.height && (
-          <div className="flex justify-between my-8">
-            {(["AVERAGE", "WEIGHTED", "YUV"] as const).map((method, key) => (
-              <div
-                className="w-[30%] flex flex-col gap-y-2 items-center"
-                key={key}
-              >
-                <RGBImageDisplay
-                  className="w-full"
-                  width={inputImg.dimensions.width}
-                  height={inputImg.dimensions.height}
-                  rgbArray={rgbToGrayscale(inputImg.rgb, method)}
-                />
-                <p>{method} method</p>
-              </div>
-            ))}
+      {output && output.grayscale && (
+        <>
+          <RGBImageDisplay className="max-w-3/4" image={inputImg} />
+
+          <div className="flex flex-col items-center">
+            <h1 className="text-xl font-medium">Grayscale Images</h1>
+            <div className="flex justify-between my-8">
+              {(["avg", "weighted", "yuv"] as const).map((method, key) => (
+                <div
+                  className="w-[30%] flex flex-col gap-y-2 items-center"
+                  key={key}
+                >
+                  <button
+                    className="w-full"
+                    onClick={() => {
+                      output.grayscale &&
+                        setGrayscaleInput(output.grayscale[method]);
+                    }}
+                  >
+                    <RGBImageDisplay
+                      className="w-full"
+                      image={
+                        output.grayscale ? output.grayscale[method] : inputImg
+                      }
+                    />
+                  </button>
+                  <p>{method} method</p>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-col items-center gap-y-3">
-        <h1 className="text-xl font-medium">Added salt and pepper</h1>
-        {inputImg.dimensions.width && inputImg.dimensions.height && (
-          <RGBImageDisplay
-            className="max-w-3/4"
-            width={inputImg.dimensions.width}
-            height={inputImg.dimensions.height}
-            rgbArray={addSaltPepper(rgbToGrayscale(inputImg.rgb, "WEIGHTED"), {
-              pepper: 0.06,
-              salt: 0.06,
-            })}
-          />
-        )}
-      </div>
-
-      <div className="flex flex-col items-center">
-        <h1 className="text-xl font-medium">Fixed Images</h1>
-        {inputImg.dimensions.width && inputImg.dimensions.height && (
-          <div className="flex justify-between my-8">
-            {(["ARITHMETIC"] as const).map((method, key) => (
-              <div
-                className="w-[30%] flex flex-col gap-y-2 items-center"
-                key={key}
-              >
+          {grayscaleInput && output.saltPepper && (
+            <>
+              <div className="flex flex-col items-center gap-y-3">
+                <h1 className="text-xl font-medium">Added salt and pepper</h1>
                 <RGBImageDisplay
                   className="max-w-3/4"
-                  width={inputImg.dimensions.width}
-                  height={inputImg.dimensions.height}
-                  rgbArray={removeSaltPepperFromGrayscale(
-                    {
-                      dimensions: {
-                        width: inputImg.dimensions.width,
-                        height: inputImg.dimensions.height,
-                      },
-                      rgb: addSaltPepper(
-                        rgbToGrayscale(inputImg.rgb, "WEIGHTED"),
-                        {
-                          pepper: 0.06,
-                          salt: 0.06,
-                        }
-                      ),
-                    },
-                    method
-                  )}
+                  image={output.saltPepper}
                 />
-                <p>{method} method</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <div className="flex flex-col items-center">
+                <h1 className="text-xl font-medium">Fixed Images</h1>
+                <div className="flex flex-wrap gap-y-8 justify-between my-8">
+                  {(
+                    [
+                      "ARITHMETIC",
+                      "HARMONIC",
+                      "GEOMETRIC",
+                      "CONTRAHARMONIC",
+                    ] as const
+                  ).map((method, key) => (
+                    <div
+                      className="w-[48%] flex flex-col gap-y-2 items-center"
+                      key={key}
+                    >
+                      <RGBImageDisplay
+                        className="max-w-full"
+                        image={
+                          output.saltPepper &&
+                          removeSaltPepperFromGrayscale(
+                            output.saltPepper,
+                            method
+                          )
+                        }
+                      />
+                      <p>{method} method</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </article>
   );
 }
 
-const RGBImageDisplay = (props: {
-  rgbArray: number[][];
-  width: number;
-  height: number;
-  className?: string;
-}) => {
-  const { rgbArray, width, height } = props;
+const RGBImageDisplay = (props: { image: Image; className?: string }) => {
+  const rgbArray = props.image.rgb;
+  const { width, height } = props.image.dimensions;
 
   const canvasRef = useRef() as React.MutableRefObject<HTMLCanvasElement>;
 

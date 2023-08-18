@@ -3,6 +3,10 @@ type Image = {
   rgb: number[][];
 };
 
+export function deepCopy(src: object | Array<any>) {
+  return JSON.parse(JSON.stringify(src));
+}
+
 export function getRGBImage(
   img: HTMLImageElement,
   ctx: CanvasRenderingContext2D
@@ -27,9 +31,10 @@ export function getRGBImage(
 }
 
 export function rgbToGrayscale(
-  rgb: number[][],
+  img: Image,
   method: "AVERAGE" | "WEIGHTED" | "YUV"
 ) {
+  const { rgb } = img;
   const grayscale: number[][] = [];
 
   for (let [r, g, b] of rgb) {
@@ -41,12 +46,17 @@ export function rgbToGrayscale(
       gray = 0.299 * r + 0.587 * g + 0.114 * b;
     }
     if (method === "YUV") {
-      gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      gray = (r + g + b) / 3;
+      gray += 0.299 * r + 0.587 * g + 0.114 * b;
+      gray /= 2;
     }
     grayscale.push([gray, gray, gray]);
   }
 
-  return grayscale;
+  const newImg = deepCopy(img);
+  newImg.rgb = grayscale;
+
+  return newImg;
 }
 
 export function clampValue(
@@ -64,16 +74,16 @@ export function clampValue(
 }
 
 export function addSaltPepper(
-  rgb: number[][],
+  img: Image,
   weight?: { salt: number; pepper: number }
 ) {
   if (weight == undefined) {
-    weight = { salt: 0.1, pepper: 0.1 };
+    weight = { salt: 0.06, pepper: 0.06 };
   }
 
   const saltpepper: number[][] = [];
 
-  for (let pixel of rgb) {
+  for (let pixel of img.rgb) {
     if (Math.random() < weight.salt) {
       saltpepper.push([255, 255, 255]);
       continue;
@@ -85,13 +95,16 @@ export function addSaltPepper(
     saltpepper.push(pixel);
   }
 
-  return saltpepper;
+  const newImg = deepCopy(img);
+  newImg.rgb = saltpepper;
+  return newImg;
 }
 
 export function removeSaltPepperFromGrayscale(
   image: Image,
-  method: "ARITHMETIC" | "HARMONIC",
-  neighbours?: number
+  method: "ARITHMETIC" | "HARMONIC" | "GEOMETRIC" | "CONTRAHARMONIC",
+  neighbours?: number,
+  Q?: number
 ) {
   function rcToi(r: number, c: number) {
     return r * image.dimensions.width + c;
@@ -99,47 +112,71 @@ export function removeSaltPepperFromGrayscale(
 
   const fixed: number[][] = [];
 
+  neighbours = neighbours || 1;
+  Q = Q || -1.5;
+
   for (let i = 0; i < image.rgb.length; i++) {
     if (image.rgb[i][0] === 0 || image.rgb[i][0] === 255) {
       const r = Math.floor(i / image.dimensions.width);
       const c = i % image.dimensions.width;
 
       let s = 0;
+      let s1 = 0;
 
-      for (let a = -1; a <= 1; a++) {
-        for (let b = -1; b <= 1; b++) {
+      for (let a = -neighbours; a <= neighbours; a++) {
+        for (let b = -neighbours; b <= neighbours; b++) {
           try {
             if (a || b) {
-              s +=
+              const gray =
                 image.rgb[
                   rcToi(
-                    clampValue(r + a, { min: 0, max: image.dimensions.width }),
+                    clampValue(r + a, {
+                      min: 0,
+                      max: image.dimensions.width,
+                    }),
                     clampValue(c + b, { min: 0, max: image.dimensions.width })
                   )
                 ][0];
+              if (method === "ARITHMETIC") {
+                s += gray;
+              }
+              if (method === "HARMONIC") {
+                s += 1 / gray;
+              }
+              if (method === "GEOMETRIC") {
+                s *= gray;
+              }
+              if (method === "CONTRAHARMONIC") {
+                s += Math.pow(gray, Q);
+                s1 += Math.pow(gray, Q + 1);
+              }
             }
-          } catch (_) {
-            console.log(
-              r,
-              c,
-              a,
-              b,
-              i,
-              rcToi(r, c),
-              rcToi(
-                clampValue(r + a, { min: 0, max: image.dimensions.width }),
-                clampValue(c + b, { min: 0, max: image.dimensions.width })
-              )
-            );
-          }
+          } catch (_) {}
         }
       }
 
-      fixed.push([s / 9, s / 9, s / 9]);
+      let newGray = 0;
+      if (method === "ARITHMETIC") {
+        newGray = s / Math.pow(2 * neighbours + 1, 2);
+      }
+      if (method === "HARMONIC") {
+        newGray = Math.pow(neighbours, 2) / s;
+      }
+      if (method === "GEOMETRIC") {
+        newGray = Math.pow(s, 1 / Math.pow(neighbours, 2));
+      }
+      if (method === "CONTRAHARMONIC") {
+        newGray = s1 / s;
+      }
+
+      fixed.push([newGray, newGray, newGray]);
       continue;
     }
     fixed.push(image.rgb[i]);
   }
 
-  return fixed;
+  const newImg = deepCopy(image);
+  newImg.rgb = fixed;
+
+  return newImg;
 }
